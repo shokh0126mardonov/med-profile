@@ -12,6 +12,9 @@ class User(AbstractUser):
     role = models.CharField(choices=UserRole.choices)
 
 
+    class Meta:
+        ordering = ['-pk']
+
 
 
 class SickModel(models.Model):
@@ -19,3 +22,10 @@ class SickModel(models.Model):
     telegram_id = models.BigIntegerField(unique=True,null=True,blank=True)
     phone = PhoneNumberField(unique=True, region="UZ", blank=True, null=True)
     to_come = models.BooleanField(default=False)
+
+    def __str__(self):
+        return f"{self.pk} and {self.full_name }and {self.phone} "
+    
+
+    class Meta:
+        ordering = ['-pk']
