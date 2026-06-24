@@ -3,12 +3,14 @@ from telegram.ext import (
     Application, CommandHandler, ConversationHandler, MessageHandler, CallbackQueryHandler, filters
 )
 from decouple import config
-from handlers import start, login, StepBot, get_full_name, get_contact, inline_callback
+from handlers import start, login, StepBot, get_full_name, get_contact, inline_callback,location
 
 def main() -> None:
     application = Application.builder().token(config("TOKEN")).build()
     
     application.add_handler(CommandHandler('start', start))
+
+    application.add_handler(CommandHandler('location', location))
 
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler('login', login)],

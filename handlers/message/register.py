@@ -14,7 +14,7 @@ from ..utils import StepBot
 from ..utils import StepBot  
 
 async def get_full_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    full_name = update.message.text
+    full_name = update.message.text.title()
     context.user_data['full_name'] = full_name
 
     await update.message.reply_text(
@@ -71,6 +71,7 @@ async def inline_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 full_name=full_name,
                 phone = phone_number
             )
+            context.user_data['login'] = True
             await query.edit_message_text(text="🎉 Tizimga muvaffaqiyatli kirdingiz!")
             return ConversationHandler.END
         else:

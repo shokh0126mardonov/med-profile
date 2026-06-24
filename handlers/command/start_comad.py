@@ -2,13 +2,30 @@ from telegram import Update
 from telegram.ext import ContextTypes
 
 
-async def start(update:Update,context:ContextTypes.DEFAULT_TYPE):
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if context.user_data.get('login'):
+        # Login qilgan foydalanuvchilar uchun tibbiy menyu dizayni
+        welcome_back_text = (
+            "👋 **Assalomu alaykum! Tibbiyot markazimiz botiga xush kelibsiz!**\n\n"
+            "Siz tizimdan muvaffaqiyatli oʻtgansiz. Quyidagi buyruqlar orqali xizmatlarimizdan foydalanishingiz mumkin:\n\n"
+            "📍 /location — Klinikamizning aniq manzili va geografik joylashuvi\n"
+            # "👤 /profile — Shaxsiy profilingiz va tibbiy kartangiz maʼlumotlari\n"
+            "📝 /ariza — Shifokor koʻrigiga ariza qoldirish. Kasallik belgilari yoki sizni qiynayotgan simptomlarni yozib qoldiring, shifokorlarimiz siz bilan bogʻlanishadi.\n\n"
+            "🏥 _Sizning salomatligingiz — bizning oliy maqsadimiz!_"
+        )
         await update.message.reply_text(
-            "Salom"
+            text=welcome_back_text,
+            parse_mode="Markdown"
         )
     else:
+        # Tizimga kirmaganlar uchun ogohlantirish dizayni
+        login_required_text = (
+            "🔒 **Xizmatlardan foydalanish uchun tizimga kirish talab etiladi.**\n\n"
+            "Klinika shifokorlari bilan bogʻlanish va arizangizni koʻrib chiqishimiz uchun, iltimos, avval roʻyxatdan oʻting:\n\n"
+            "👉 /login buyrugʻini bosing."
+        )
         await update.message.reply_text(
-            'login qiling /login tugmasini bosing'
+            text=login_required_text,
+            parse_mode="Markdown"
         )
