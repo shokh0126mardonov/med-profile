@@ -41,7 +41,10 @@ INSTALLED_APPS = [
     'apps.users',
 
     "rest_framework",
+    'phonenumber_field',
 ]
+
+PHONENUMBER_DEFAULT_REGION = "UZ"
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',

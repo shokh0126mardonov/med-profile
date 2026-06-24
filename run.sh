@@ -1,0 +1,1 @@
+python manage.py runserver and python main.py 8001
