@@ -41,8 +41,10 @@ INSTALLED_APPS = [
     'apps.users',
     'apps.application',
 
+    "drf_spectacular",
     "rest_framework",
     'phonenumber_field',
+    'rest_framework_simplejwt',
 ]
 
 PHONENUMBER_DEFAULT_REGION = "UZ"
@@ -124,9 +126,18 @@ AUTH_USER_MODEL = 'users.User'
 
 STATIC_URL = 'static/'
 
-
 REST_FRAMEWORK = {
-    "DEFAULT_PERMISSION_CLASSES": [
-        "rest_framework.permissions.DjangoModelPermissionsOrAnonReadOnly"
-    ]
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+    
+    # 💥 MANA SHU QISM ASSOTSIATSIYANI TO'G'RILAYDI:
+    "DEFAULT_AUTHENTICATION_CLASSES": (
+        "rest_framework_simplejwt.authentication.JWTAuthentication",
+    ),
+}
+
+SPECTACULAR_SETTINGS = {
+    "TITLE": "Sklad API",
+    "DESCRIPTION": "Mahsulotlar va ombor boshqaruvi tizimi",
+    "VERSION": "1.0.0",
+    "SERVE_INCLUDE_SCHEMA": False,
 }

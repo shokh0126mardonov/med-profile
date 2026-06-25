@@ -10,7 +10,7 @@ class UserRole(models.TextChoices):
 
 class User(AbstractUser):
     role = models.CharField(choices=UserRole.choices)
-
+    phone = PhoneNumberField(unique=True, region="UZ", blank=True, null=True)
 
     class Meta:
         ordering = ['-pk']
