@@ -4,7 +4,6 @@ from django.contrib.auth.models import AbstractUser
 from phonenumber_field.modelfields import PhoneNumberField
 
 class UserRole(models.TextChoices):
-    USER = 'USER','User'
     OPERATOR = 'OPERATOR','Operator'
     DOCTOR = 'DOCTOR','Doctor'
 
