@@ -5,7 +5,6 @@ from telegram.ext import ContextTypes
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if context.user_data.get('login'):
-        # Login qilgan foydalanuvchilar uchun tibbiy menyu dizayni
         welcome_back_text = (
             "👋 **Assalomu alaykum! Tibbiyot markazimiz botiga xush kelibsiz!**\n\n"
             "Siz tizimdan muvaffaqiyatli oʻtgansiz. Quyidagi buyruqlar orqali xizmatlarimizdan foydalanishingiz mumkin:\n\n"
@@ -23,7 +22,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         login_required_text = (
             "🔒 **Xizmatlardan foydalanish uchun tizimga kirish talab etiladi.**\n\n"
             "Klinika shifokorlari bilan bogʻlanish va arizangizni koʻrib chiqishimiz uchun, iltimos, avval roʻyxatdan oʻting:\n\n"
-            "👉 /login buyrugʻini bosing."
+            "👉 /register buyrugʻini bosing."
         )
         await update.message.reply_text(
             text=login_required_text,

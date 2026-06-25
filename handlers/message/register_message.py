@@ -70,11 +70,9 @@ async def inline_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 full_name=full_name,
                 phone = phone_number
             )
-            context.user_data['login'] = True
             await query.edit_message_text(text="🎉 Tizimga muvaffaqiyatli kirdingiz!")
             return ConversationHandler.END
         else:
-            # Inline tugmalarni o'chirib, xabar matnini o'zgartiramiz va jarayonni tugatamiz
             await query.edit_message_text(
                 text=f"Sizning ({phone_number}) telefon raqamingiz tizimda allaqachon mavjud!"
             )
