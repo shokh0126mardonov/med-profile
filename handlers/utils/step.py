@@ -7,3 +7,7 @@ class StepBot:
 
 class StepAplication:
     APPLICATION,CONFIRM = range(2)
+
+
+class Steplogin:
+    CONTACT = range(1)

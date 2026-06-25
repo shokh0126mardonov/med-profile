@@ -1,2 +1,2 @@
-from .register import *
 from .applications import *
+from .register_message import *

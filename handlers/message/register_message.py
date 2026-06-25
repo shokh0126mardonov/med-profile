@@ -3,7 +3,6 @@ import django
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import ContextTypes, ConversationHandler
 
-# Django ORMni tashqi skriptda ishga tushirish uchun majburiy setup:
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'core.settings') # core o'rniga loyihangiz nomi
 django.setup()
 
