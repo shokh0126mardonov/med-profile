@@ -6,6 +6,7 @@ class Applications(models.Model):
         ('ASSIGNED', 'Shifokor biriktirildi'),
         ('REJECTED', 'Rad etildi'),
         ('COMPLETED', 'Yakunlandi (Shifokor javob berdi)'),
+        ('CLOSED', 'Yopildi (Bemorga javob yuborildi)'),
     ]
 
     sick = models.ForeignKey(
