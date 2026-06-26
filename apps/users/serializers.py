@@ -43,3 +43,15 @@ class UserSerializer(serializers.ModelSerializer):
             instance.save()
 
         return instance
+
+
+from rest_framework import serializers
+from .models import SickModel
+
+class SickModelSerializer(serializers.ModelSerializer):
+    phone = serializers.CharField(read_only=True)
+
+    class Meta:
+        model = SickModel
+        fields = ['id', 'full_name', 'telegram_id', 'phone', 'to_come']
+        read_only_fields = fields  

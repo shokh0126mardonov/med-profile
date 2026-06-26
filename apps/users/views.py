@@ -1,5 +1,5 @@
 from rest_framework.views import APIView
-from rest_framework import viewsets
+from rest_framework import viewsets,filters
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework import status
@@ -121,4 +121,45 @@ class LoginView(TokenObtainPairView):
                 "id": user.id,
             }
         )
+
+
+from rest_framework import viewsets
+from rest_framework.permissions import IsAuthenticated
+from drf_spectacular.utils import extend_schema_view, extend_schema, OpenApiParameter
+from drf_spectacular.types import OpenApiTypes
+from .models import SickModel
+from .serializers import SickModelSerializer
+
+@extend_schema_view(
+    list=extend_schema(
+        parameters=[
+            OpenApiParameter(
+                name='to_come',
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                required=False,
+                description="Bemor kelgan yoki kelmaganligini filtrlash (true/false yoki 1/0). Bo'sh bo'lsa hammasini qaytaradi.",
+                enum=['true', 'false']
+            ),
+        ]
+    )
+)
+class SickModelViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = SickModel.objects.all()
+    serializer_class = SickModelSerializer
+    permission_classes = [IsAuthenticated]  
+    filter_backends = [filters.SearchFilter]
     
+    search_fields = ['full_name', 'phone']
+
+    def get_queryset(self):
+        queryset = SickModel.objects.all()        
+        to_come_param = self.request.query_params.get('to_come', None)
+        
+        if to_come_param is not None:
+            if to_come_param.lower() in ['true']:
+                queryset = queryset.filter(to_come=True)
+            elif to_come_param.lower() in ['false']:
+                queryset = queryset.filter(to_come=False)
+                
+        return queryset
