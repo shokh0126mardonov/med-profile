@@ -40,6 +40,7 @@ INSTALLED_APPS = [
 
     'apps.users',
     'apps.application',
+    'apps.statistic',
 
     "drf_spectacular",
     "rest_framework",
