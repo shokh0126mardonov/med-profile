@@ -25,7 +25,7 @@ SECRET_KEY = 'django-insecure-uga^$i3hpfz&vw+!s1r-w%rcom+lvm05ek%k#xxulmcw%v(!ck
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['*']
 
 
 # Application definition
@@ -130,15 +130,14 @@ STATIC_URL = 'static/'
 REST_FRAMEWORK = {
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     
-    # 💥 MANA SHU QISM ASSOTSIATSIYANI TO'G'RILAYDI:
     "DEFAULT_AUTHENTICATION_CLASSES": (
         "rest_framework_simplejwt.authentication.JWTAuthentication",
     ),
 }
 
 SPECTACULAR_SETTINGS = {
-    "TITLE": "Sklad API",
-    "DESCRIPTION": "Mahsulotlar va ombor boshqaruvi tizimi",
+    "TITLE": "Med Ilova",
+    "DESCRIPTION": "Med klinika boshqaruv tizimi",
     "VERSION": "1.0.0",
     "SERVE_INCLUDE_SCHEMA": False,
 }
