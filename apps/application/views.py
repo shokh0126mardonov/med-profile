@@ -3,6 +3,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 import asyncio
+from django.db.models import Q
 
 from handlers import send_to_user as send_to_user_bot
 from .models import Applications
@@ -22,13 +23,18 @@ class ApplicationViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [IsAuthenticated] 
 
     def get_queryset(self):
-        user = self.request.user
-        queryset = Applications.objects.all()
+            user = self.request.user
+            queryset = Applications.objects.all()
 
-        if user.is_authenticated and getattr(user, 'role', None) == 'DOCTOR':
-            queryset = queryset.exclude(rejected_by_doctors=user)
-            
-        return queryset
+            if user.is_authenticated and getattr(user, 'role', None) == 'DOCTOR':
+                queryset = queryset.filter(
+                    Q(status='NEW') |                     
+                    Q(doctor=user)
+                ).exclude(
+                    rejected_by_doctors=user
+                )
+                
+            return queryset
 
     @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated])
     def not_my_case(self, request, pk=None):
