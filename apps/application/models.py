@@ -20,6 +20,15 @@ class Applications(models.Model):
         limit_choices_to={'role': 'DOCTOR'},
         related_name='doctor_applications'
     )
+
+    rejected_by_doctors = models.ManyToManyField(
+        'users.User',
+        blank=True,
+        related_name='skipped_applications',
+        verbose_name="Ushbu arizani rad etgan shifokorlar",
+        limit_choices_to={'role':'DOCTOR'}
+
+    )
     
     text = models.TextField(verbose_name="Bemor arizasi matni")
     

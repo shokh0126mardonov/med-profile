@@ -18,12 +18,37 @@ class ApplicationViewSet(viewsets.ReadOnlyModelViewSet):
     Faqat GET (list va retrieve) ishlaydi. 
     Umumiy POST, PUT, PATCH, DELETE so'rovlari mutlaqo bloklangan.
     """
-    queryset = Applications.objects.all().order_by('-created_at')
     serializer_class = ApplicationListRetrieveSerializer
-    permission_classes = [IsAuthenticated] # GET qilish uchun login qilish shart
+    permission_classes = [IsAuthenticated] 
 
-    # 1-ETAP: Shifokor arizani o'ziga biriktiradi (Kasalni qabul qilish)
-    # POST /api/applications/<id>/accept_application/
+    def get_queryset(self):
+        user = self.request.user
+        queryset = Applications.objects.all()
+
+        if user.is_authenticated and getattr(user, 'role', None) == 'DOCTOR':
+            queryset = queryset.exclude(rejected_by_doctors=user)
+            
+        return queryset
+
+    @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated])
+    def not_my_case(self, request, pk=None):
+        application = self.get_object()
+        user = request.user
+
+        if getattr(user, 'role', None) != 'DOCTOR':
+            return Response({"error": "Faqat shifokorlar arizani rad eta oladi!"}, status=status.HTTP_403_FORBIDDEN)
+
+        application.rejected_by_doctors.add(user)
+
+        if application.doctor == user:
+            application.doctor = None
+            application.status = 'NEW'
+        
+        application.save()
+
+        return Response({"message": "Ariza rad etildi. U sizga boshqa ko'rinmaydi va umumiy ro'yxatga qaytarildi."})
+
+    
     @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated, IsDoctor])
     def accept_application(self, request, pk=None):
         application = self.get_object()
