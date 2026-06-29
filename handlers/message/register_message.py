@@ -70,7 +70,9 @@ async def inline_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 full_name=full_name,
                 phone = phone_number
             )
-            await query.edit_message_text(text="🎉 Tizimga muvaffaqiyatli kirdingiz!\n\nDavom etish uchun /login buyrug'ini bosing.")
+            await query.edit_message_text(
+                text="🎉 Tizimga muvaffaqiyatli kirdingiz!\n\nAgar ariza yubormoqchi boʻlsangiz, /ariza buyrugʻini bosing."
+            )
             return ConversationHandler.END
         else:
             await query.edit_message_text(
