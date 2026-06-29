@@ -15,8 +15,8 @@ from handlers import (
 def main() -> None:
     application = Application.builder().token(config("TOKEN")).build()
     
-    application.add_handler(CommandHandler('start', start))
-    application.add_handler(CommandHandler('location', location))
+    # application.add_handler(CommandHandler('start', start))
+    application.add_handler(CommandHandler('start', location))
 
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler('register', register)],
