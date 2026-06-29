@@ -5,7 +5,7 @@ from apps.application.models import Applications, ApplicationAssignment
 from apps.users.models import SickModel
 from decouple import config  
 from rest_framework.reverse import reverse
-
+from drf_spectacular.utils import extend_schema_field
 User = get_user_model()
 
 # .env dan token olamiz
@@ -67,6 +67,7 @@ class ApplicationListRetrieveSerializer(serializers.ModelSerializer):
             'created_at', 'updated_at'
         ]
 
+    @extend_schema_field(serializers.CharField)
     def get_user_file(self, obj):
         user_file_url = getattr(obj, 'user_file_url', None)
         if not user_file_url:
