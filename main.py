@@ -8,7 +8,7 @@ from handlers import (
     get_full_name, get_contact,
     inline_callback,location,ariza,
     confirm_aplication,get_aplication,
-    cancel,login,try_user,
+    cancel,login,try_user,get_file,
     Steplogin,StepBot,StepAplication
 )
 
@@ -43,15 +43,22 @@ def main() -> None:
     conv_handler3 = ConversationHandler(
         entry_points=[CommandHandler('ariza', ariza)],
         states={
-            StepAplication.APPLICATION:[MessageHandler(filters=filters.TEXT &  ~filters.COMMAND,callback=get_aplication)],
-            StepAplication.CONFIRM:[CallbackQueryHandler(confirm_aplication)]
-        },
+        StepAplication.APPLICATION: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_aplication)],
+        
+        # 💡 YANGI BOSQICH:
+        StepAplication.FILE: [
+            CallbackQueryHandler(get_file, pattern="^skip_file$"), # Tugmani bossa
+            MessageHandler(filters.Document.ALL | filters.PHOTO, get_file) # Rasm yoki fayl yuborsa
+        ],
+        
+        StepAplication.CONFIRM: [CallbackQueryHandler(confirm_aplication, pattern="^confirm_")]
+    },
         fallbacks=[CommandHandler("cancel", cancel)],
         allow_reentry=True 
     )
 
     application.add_handler(conv_handler)
-    application.add_handler(conv_handler2)
+    # application.add_handler(conv_handler2)
     application.add_handler(conv_handler3)
     
     print("Bot ishga tushdi...")

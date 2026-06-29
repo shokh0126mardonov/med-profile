@@ -6,7 +6,7 @@ class StepBot:
 
 
 class StepAplication:
-    APPLICATION,CONFIRM = range(2)
+    APPLICATION,FILE,CONFIRM = range(3)
 
 
 class Steplogin:

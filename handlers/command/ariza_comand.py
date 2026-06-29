@@ -1,10 +1,21 @@
+import os
+import django
+
 from telegram import Update
 from telegram.ext import ContextTypes
 
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'core.settings') 
+django.setup()
+
+from apps.users.models import SickModel
 from ..utils import StepAplication
 
 async def ariza(update:Update,context:ContextTypes.DEFAULT_TYPE):
-    if context.user_data.get('login'):
+
+
+    sick_exists = await SickModel.objects.filter(telegram_id=update.effective_user.id).aexists()
+
+    if sick_exists:
 
         await update.message.reply_text(
             "Ariza yuboring!"
@@ -13,12 +24,6 @@ async def ariza(update:Update,context:ContextTypes.DEFAULT_TYPE):
         return StepAplication.APPLICATION
 
     else:
-        login_required_text = (
-            "🔒 **Xizmatlardan foydalanish uchun tizimga kirish talab etiladi.**\n\n"
-            "Klinika shifokorlari bilan bogʻlanish va arizangizni koʻrib chiqishimiz uchun, iltimos, avval roʻyxatdan oʻting:\n\n"
-            "👉 /login buyrugʻini bosing."
-        )
         await update.message.reply_text(
-            text=login_required_text,
-            parse_mode="Markdown"
-        )
+           "siz /register buyrug'i orqali ro'yxatdan o'ting! "
+       )
