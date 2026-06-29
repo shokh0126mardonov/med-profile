@@ -1,8 +1,10 @@
 import os
 import django
+import requests
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardRemove
 from telegram.ext import ContextTypes, ConversationHandler
 from telegram.constants import ParseMode 
+from decouple import config
 
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'core.settings')
 django.setup()
@@ -33,22 +35,43 @@ async def get_aplication(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return StepAplication.FILE
 
 
-# 2. FAYLNI QABUL QILISH
+TOKEN = config('TOKEN')
+
 async def get_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
+    
+    file_id = None
+    file_url = None
     
     if query and query.data == "skip_file":
         await query.answer()
         context.user_data['file_id'] = None
+        context.user_data['user_file_url'] = None
+    
     else:
         message = update.message
-        file_id = None
+        
         if message.document:
             file_id = message.document.file_id
         elif message.photo:
-            file_id = message.photo[-1].file_id
+            file_id = message.photo[-1].file_id 
             
         context.user_data['file_id'] = file_id
+
+        if file_id:
+            try:
+                url = f"https://api.telegram.org/bot{TOKEN}/getFile"
+                response = requests.get(url, params={'file_id': file_id}, timeout=5)
+                
+                if response.status_code == 200:
+                    result = response.json()
+                    if result.get('ok'):
+                        file_path = result['result']['file_path']
+                        file_url = f"https://api.telegram.org/file/bot{TOKEN}/{file_path}"
+            except Exception as e:
+                print(f"💥 Bot ichida fayl yo'lini aniqlashda xatolik: {e}")
+        
+        context.user_data['user_file_url'] = file_url
 
     inline_keyboard = [
         [
@@ -58,16 +81,32 @@ async def get_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     reply_markup = InlineKeyboardMarkup(inline_keyboard)
 
+    # 4-QADAM: Xabar matnini tayyorlash
     app_text = context.user_data.get('application', '')
-    has_file = "📎 Biriktirilgan" if context.user_data.get('file_id') else "❌ Yo'q"
+    has_file = "📎 Biriktirilgan (Yuklandi)" if context.user_data.get('user_file_url') else "❌ Yo'q"
 
-    msg_text = f"📝 **Ariza ma'lumotlari:**\n\n**Matn:** {app_text}\n**Fayl:** {has_file}\n\nUshbu arizani tasdiqlaysizmi?"
+    msg_text = (
+        "📝 **Ariza ma'lumotlari:**\n\n"
+        f"**Matn:** {app_text}\n"
+        f"**Fayl:** {has_file}\n\n"
+        "Ushbu arizani tasdiqlaysizmi?"
+    )
     
+    # 5-QADAM: Foydalanuvchiga xabarni chiqarish (Tugma bosilganiga yoki fayl kelganiga qarab)
     if query:
-        await query.edit_message_text(text=msg_text, reply_markup=reply_markup, parse_mode=ParseMode.MARKDOWN)
+        await query.edit_message_text(
+            text=msg_text, 
+            reply_markup=reply_markup, 
+            parse_mode=ParseMode.MARKDOWN
+        )
     else:
-        await update.message.reply_text(text=msg_text, reply_markup=reply_markup, parse_mode=ParseMode.MARKDOWN)
+        await update.message.reply_text(
+            text=msg_text, 
+            reply_markup=reply_markup, 
+            parse_mode=ParseMode.MARKDOWN
+        )
 
+    # Keyingi qadamga (CONFIRM) o'tkazamiz
     return StepAplication.CONFIRM
 
 
@@ -82,11 +121,10 @@ async def confirm_aplication(update: Update, context: ContextTypes.DEFAULT_TYPE)
             # Sening mantiqing bo'yicha foydalanuvchi bazada aniq bor, shuning uchun aget() qilamiz
             sick_user = await SickModel.objects.aget(telegram_id=user_id)
             
-            # Xavfsiz yaratish: ManyToMany (doctors) bilan muammo bo'lmasligi uchun faqat kerakli maydonlarni beramiz
             await Applications.objects.acreate(
                 sick=sick_user,
                 text=context.user_data.get('application', ''),
-                file_id=context.user_data.get('file_id', None),
+                user_file_url=context.user_data.get('user_file_url'),
                 status='NEW' # Default holatda yangi ariza
             )
             

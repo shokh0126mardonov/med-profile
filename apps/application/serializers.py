@@ -3,16 +3,14 @@ from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from apps.application.models import Applications, ApplicationAssignment
 from apps.users.models import SickModel
-from decouple import config  # 💡 Config orqali TOKEN'ni chaqiramiz
+from decouple import config  
+from rest_framework.reverse import reverse
 
 User = get_user_model()
 
-# 💡 TOKEN'ni aynan sen aytganingdek config'dan oldik:
+# .env dan token olamiz
 BOT_TOKEN = config('TOKEN') 
 
-# ==============================================================================
-# 1. YORDAMCHI (NESTED) SERIALIZERLAR
-# ==============================================================================
 
 class UserShortSerializer(serializers.ModelSerializer):
     """Shifokor ma'lumotlarini qisqa ko'rinishda qaytarish"""
@@ -30,7 +28,7 @@ class SickShortSerializer(serializers.ModelSerializer):
     """
     class Meta:
         model = SickModel
-        fields = ['id', 'full_name', 'phone']  # 🔒 telegram_id bu yerda yo'q!
+        fields = ['id', 'full_name', 'phone']
 
 
 class ApplicationAssignmentSerializer(serializers.ModelSerializer):
@@ -56,46 +54,35 @@ class ApplicationAssignmentSerializer(serializers.ModelSerializer):
 # ==============================================================================
 
 class ApplicationListRetrieveSerializer(serializers.ModelSerializer):
-    """GET /api/applications/ (list va retrieve) uchun"""
     sick = SickShortSerializer(read_only=True)
     assignments = ApplicationAssignmentSerializer(many=True, read_only=True)
+    
     user_file = serializers.SerializerMethodField()
 
     class Meta:
         model = Applications
         fields = [
-            'id', 
-            'sick', 
-            'text', 
-            'user_file', 
-            'status', 
-            'operator_response', 
-            'assignments', 
-            'created_at', 
-            'updated_at'
+            'id', 'sick', 'text', 'user_file', 
+            'status', 'operator_response', 'assignments', 
+            'created_at', 'updated_at'
         ]
 
     def get_user_file(self, obj):
-        if not obj.file_id:
+        user_file_url = getattr(obj, 'user_file_url', None)
+        if not user_file_url:
             return None
             
+        request = self.context.get('request')
         try:
-            # Telegram API orqali fayl yo'lini (file_path) so'raymiz
-            url = f"https://api.telegram.org/bot{BOT_TOKEN}/getFile"
-            response = requests.get(url, params={'file_id': obj.file_id}, timeout=5)
-            
-            if response.status_code == 200:
-                result = response.json()
-                if result.get('ok'):
-                    file_path = result['result']['file_path']
-                    return f"https://api.telegram.org/file/bot{BOT_TOKEN}/{file_path}"
-                    
-        except Exception as e:
-            print(f"💥 Telegram fayl yo'lini olishda xatolik: {e}")
-            
-        return None
+            return reverse(
+                'application-view-file', 
+                kwargs={'pk': obj.id}, 
+                request=request
+            )
+        except Exception:
+            return f"/Aplications/applications/{obj.id}/view_file/"
 
-
+        
 class DoctorResponseSerializer(serializers.ModelSerializer):
     """Shifokor saytdan matnli tashxis va fayl yuklashi uchun"""
     class Meta:

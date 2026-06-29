@@ -1,5 +1,3 @@
-import os
-import django
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -8,6 +6,10 @@ import asyncio
 from django.db.models import Q
 from django.utils import timezone
 from drf_spectacular.utils import extend_schema
+from django.http import Http404, StreamingHttpResponse
+import requests
+
+from decouple import config
 
 from handlers import send_to_user as send_to_user_bot
 from .models import Applications, ApplicationAssignment 
@@ -28,18 +30,26 @@ class ApplicationViewSet(viewsets.ReadOnlyModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
-        queryset = Applications.objects.all()
+        
+        # 💡 OPTIMALLASHTIRILGAN KVARTET:
+        # select_related('sick') -> Bemor ma'lumotlarini srazi JOIN qiladi
+        # prefetch_related -> Shifokorlar va o'rta jadval ma'lumotlarini bitta so'rovda keshlab oladi
+        queryset = Applications.objects.select_related('sick').prefetch_related(
+            'doctors',
+            'assignments',
+            'assignments__doctor'  # O'rta jadval ichidagi shifokor foydalanuvchilarini ham srazi yuklaydi
+        )
 
-        # 💡 SHIFOKORLAR UCHUN FILTR:
         if user.is_authenticated and getattr(user, 'role', None) == 'DOCTOR':
             queryset = queryset.filter(
-                Q(status='NEW') |                     
-                Q(doctors=user)  # 💡 Many-to-Many'da o'zi biriktirilgan arizalar
+                Q(status__in=['NEW', 'ASSIGNED']) |                     
+                Q(doctors=user)
             ).exclude(
                 rejected_by_doctors=user
-            ).distinct() # Takrorlanishlarning oldini olish uchun
+            )
             
-        return queryset
+        # 💡 .distinct() Many-to-Many joinlar sababli arizalar takrorlanib chiqishini oldini oladi
+        return queryset.distinct()
 
     # 1. SHIFOKOR ARIZANI RAD ETISHI
     @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated])
@@ -195,3 +205,41 @@ class ApplicationViewSet(viewsets.ReadOnlyModelViewSet):
                 "message": "Ariza tizimda yopildi, lekin Telegram bot orqali yuborishda xatolik yuz berdi.",
                 "details": str(e)
             }, status=status.HTTP_207_MULTI_STATUS)
+
+
+    @action(detail=True, methods=['get'], url_path='view_file', permission_classes=[])
+    def view_file(self, request, pk=None):
+        """
+        🔒 Telegram tokenini yashirgan holda faylni xavfsiz ko'rsatish
+        """
+        # 💡 self.get_object() o'rniga to'g'ridan-to'g'ri modeldan qidiramiz
+        # Bu get_queryset() ichidagi shifokor filtrlarining xalaqit berishini oldini oladi
+        try:
+            application = Applications.objects.get(pk=pk)
+        except Applications.DoesNotExist:
+            raise Http404("Ariza topilmadi!")
+
+        user_file_url = getattr(application, 'user_file_url', None)
+        if not user_file_url:
+            raise Http404("Ushbu arizaga fayl biriktirilmagan!")
+
+        token = config('TOKEN')
+        if not str(user_file_url).startswith('http'):
+            telegram_file_url = f"https://api.telegram.org/file/bot{token}/{user_file_url}"
+        else:
+            telegram_file_url = user_file_url
+
+        try:
+            tg_response = requests.get(telegram_file_url, stream=True, timeout=10)
+            if tg_response.status_code != 200:
+                raise Http404("Telegram faylni berishni rad etdi.")
+            
+            response = StreamingHttpResponse(
+                tg_response.iter_content(chunk_size=8192),
+                content_type=tg_response.headers.get('Content-Type', 'application/octet-stream')
+            )
+            response['Content-Disposition'] = 'inline'
+            return response
+            
+        except Exception:
+            raise Http404("Faylni yuklashda ichki xatolik.")

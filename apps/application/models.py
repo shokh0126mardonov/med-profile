@@ -13,12 +13,7 @@ class Applications(models.Model):
         'users.SickModel', on_delete=models.CASCADE, related_name='applications'
     )
     
-    file_id = models.CharField(
-        max_length=255, 
-        null=True, 
-        blank=True, 
-        verbose_name="Bemor yuborgan fayl/rasm ID-si"
-    )
+    user_file_url = models.URLField(max_length=500, null=True, blank=True, verbose_name="Bemor fayli havolasi")
 
     
     doctors = models.ManyToManyField(
