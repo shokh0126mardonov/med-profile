@@ -1,7 +1,12 @@
 # apps/application/admin.py
 
 from django.contrib import admin
-from .models import Applications
+from .models import Applications,ApplicationAssignment
+
+
+admin.site.register(
+    ApplicationAssignment
+)
 
 @admin.register(Applications)
 class ApplicationsAdmin(admin.ModelAdmin):
