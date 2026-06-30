@@ -31,9 +31,6 @@ class ApplicationViewSet(viewsets.ReadOnlyModelViewSet):
     def get_queryset(self):
         user = self.request.user
         
-        # 💡 OPTIMALLASHTIRILGAN KVARTET:
-        # select_related('sick') -> Bemor ma'lumotlarini srazi JOIN qiladi
-        # prefetch_related -> Shifokorlar va o'rta jadval ma'lumotlarini bitta so'rovda keshlab oladi
         queryset = Applications.objects.select_related('sick').prefetch_related(
             'doctors',
             'assignments',
@@ -94,9 +91,8 @@ class ApplicationViewSet(viewsets.ReadOnlyModelViewSet):
 
         return Response({"message": "Siz ushbu bemor arizasini muvaffaqiyatli qabul qildingiz!"})
 
-    # 3. SHIFOKOR TASHXIS (MATN + FAYL) YUBORISHI / TAHRIRLASHI
-    # 3. SHIFOKOR TASHXIS (MATN + FAYL) YUBORISHI / TAHRIRLASHI
-    @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated, IsDoctor])
+
+    @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated, IsDoctor],serializer_class = DoctorResponseSerializer)
     def doctor_respond(self, request, pk=None):
         application = self.get_object()
         user = request.user
@@ -115,7 +111,6 @@ class ApplicationViewSet(viewsets.ReadOnlyModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # 💡 1-QADAM: Matn kelganini va u bo'sh emasligini API darajasida ham qattiq tekshiramiz
         doctor_response_text = request.data.get('doctor_response_text', '').strip()
         if not doctor_response_text:
             return Response(
@@ -123,7 +118,6 @@ class ApplicationViewSet(viewsets.ReadOnlyModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # 💡 2-QADAM: partial=True ni olib tashladik, endi validation to'liq ishlaydi
         serializer = DoctorResponseSerializer(instance=assignment, data=request.data)
         serializer.is_valid(raise_exception=True)
         
