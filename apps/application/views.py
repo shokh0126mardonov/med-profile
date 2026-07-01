@@ -19,6 +19,7 @@ from .serializers import (
     OperatorResponseSerializer
 )
 from .permissions import IsDoctor, IsOperator
+
 class ApplicationViewSet(viewsets.ReadOnlyModelViewSet):
     """
     Faqat GET (list va retrieve) ishlaydi. 
@@ -37,10 +38,10 @@ class ApplicationViewSet(viewsets.ReadOnlyModelViewSet):
         )
 
         if user.is_authenticated and getattr(user, 'role', None) == 'DOCTOR':
-            # 💡 Agar shifokor o'rta jadvalda rad etgan bo'lsa (status='REJECTED'), unga ro'yxatda ko'rinmaydi
+            # 💡 Shifokor o'zi aniq rad etgan (status='REJECTED') arizalarni ro'yxatda ko'rmaydi.
+            # Lekin hali ko'rmagan (UNSEEN), qabul qilgan (ACCEPTED) yoki javob bergan (RESPONDED) arizalari ko'rinadi.
             queryset = queryset.filter(
-                Q(status__in=['NEW', 'ASSIGNED']) |                     
-                Q(doctors=user)
+                assignments__doctor=user
             ).exclude(
                 assignments__doctor=user,
                 assignments__status='REJECTED'
@@ -49,31 +50,26 @@ class ApplicationViewSet(viewsets.ReadOnlyModelViewSet):
         return queryset.distinct()
 
     # 1. SHIFOKOR ARIZANI RAD ETISHI (O'ZGARTIRILDI 🚀)
-    @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated])
+    @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated, IsDoctor])
     def not_my_case(self, request, pk=None):
         application = self.get_object()
         user = request.user
 
-        if getattr(user, 'role', None) != 'DOCTOR':
-            return Response({"error": "Faqat shifokorlar arizani rad eta oladi!"}, status=status.HTTP_403_FORBIDDEN)
+        # O'rta jadvaldan joriy shifokor biriktiruvini topamiz
+        assignment = ApplicationAssignment.objects.filter(application=application, doctor=user).first()
+        if not assignment:
+            return Response({"error": "Siz ushbu arizaga biriktirilmagansiz!"}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Qora ro'yxatga (ManyToManyField) ham qo'shib qo'yamiz (eski mantiq buzilmasligi uchun)
+        if assignment.status == 'RESPONDED':
+            return Response({"error": "Siz allaqachon javob bergan arizani rad eta olmaysiz!"}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Eski mantiqiy ManyToMany maydonni ham yangilab qo'yamiz
         application.rejected_by_doctors.add(user)
 
-        # 💡 YANGI MANTIQ: O'rta jadvaldagi biriktiruvni o'chirmaymiz, statusini 'REJECTED' qilamiz!
-        assignment, created = ApplicationAssignment.objects.get_or_create(
-            application=application, 
-            doctor=user
-        )
+        # Statusni REJECTED ga o'tkazamiz
         assignment.status = 'REJECTED'
         assignment.save()
             
-        # Agar arizada faol (UNSEEN yoki ACCEPTED) shifokor qolmagan bo'lsa, statusni NEW qilamiz
-        active_assignments = application.assignments.exclude(status='REJECTED')
-        if not active_assignments.exists():
-            application.status = 'NEW'
-            application.save()
-
         return Response({"message": "Ariza rad etildi. U sizga boshqa ko'rinmaydi va statistikaga qo'shildi."})
 
     # 2. SHIFOKOR ARIZANI QABUL QILISHI (O'ZGARTIRILDI 🚀)
@@ -83,41 +79,36 @@ class ApplicationViewSet(viewsets.ReadOnlyModelViewSet):
         application = self.get_object()
         user = request.user
 
-        # Allaqachon o'ziga faol biriktirganmi tekshiramiz
-        existing_assignment = ApplicationAssignment.objects.filter(application=application, doctor=user).first()
-        if existing_assignment and existing_assignment.status in ['UNSEEN', 'ACCEPTED']:
-            return Response({"error": "Siz bu arizani allaqachon o'zingizga biriktirgan ekansiz!"}, status=status.HTTP_400_BAD_REQUEST)
+        assignment = ApplicationAssignment.objects.filter(application=application, doctor=user).first()
+        if not assignment:
+            return Response({"error": "Siz ushbu arizaga biriktirilmagansiz!"}, status=status.HTTP_400_BAD_REQUEST)
 
-        # 💡 O'rta jadval orqali shifokorni bog'laymiz va statusni 'ACCEPTED' qilamiz
-        if existing_assignment:
-            existing_assignment.status = 'ACCEPTED'
-            existing_assignment.save()
-        else:
-            ApplicationAssignment.objects.create(application=application, doctor=user, status='ACCEPTED')
+        if assignment.status == 'ACCEPTED':
+            return Response({"error": "Siz bu arizani allaqachon qabul qilgansiz va u jarayonda!"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        if assignment.status == 'RESPONDED':
+            return Response({"error": "Siz bu arizaga allaqachon tashxis yozib bo'lgansiz!"}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Global statusni o'zgartiramiz
-        application.status = 'ASSIGNED'
-        application.save()
+        # Status UNSEEN dan ACCEPTED (Qabul qildi) holatiga o'tadi
+        assignment.status = 'ACCEPTED'
+        assignment.save()
 
         return Response({"message": "Siz ushbu bemor arizasini muvaffaqiyatli qabul qildingiz!"})
 
-    # 3. SHIFOKOR TASHXIS YOZISHI
+    # 3. SHIFOKOR TASHXIS YOZISHI (O'ZGARTIRILDI 🚀)
     @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated, IsDoctor], serializer_class=DoctorResponseSerializer)
     def doctor_respond(self, request, pk=None):
         application = self.get_object()
         user = request.user
 
-        # O'rta jadvaldan joriy shifokorning biriktiruvini qidiramiz
         assignment = ApplicationAssignment.objects.filter(application=application, doctor=user).first()
-        if not assignment or assignment.status == 'REJECTED':
-            return Response(
-                {"error": "Siz bu arizaga javob bera olmaysiz, chunki u sizga biriktirilmagan yoki rad etgansiz!"}, 
-                status=status.HTTP_403_FORBIDDEN
-            )
+        if not assignment:
+            return Response({"error": "Siz ushbu arizaga biriktirilmagansiz!"}, status=status.HTTP_403_FORBIDDEN)
 
-        if application.status not in ['ASSIGNED', 'COMPLETED']:
+        # Faqat qabul qilingan (ACCEPTED) arizalargagina tashxis yozishga ruxsat beramiz
+        if assignment.status != 'ACCEPTED':
             return Response(
-                {"error": "Ariza yopilgan yoki hali qabul qilinmagan, unga tashxis yozib bo'lmaydi!"}, 
+                {"error": "Tashxis yozishdan oldin arizani qabul qilishingiz (accept_application) shart!"}, 
                 status=status.HTTP_400_BAD_REQUEST
             )
 
@@ -131,23 +122,21 @@ class ApplicationViewSet(viewsets.ReadOnlyModelViewSet):
         serializer = DoctorResponseSerializer(instance=assignment, data=request.data)
         serializer.is_valid(raise_exception=True)
         
-        # O'rta jadvaldagi ma'lumotlarni saqlaymiz (status 'ACCEPTED'ligicha qoladi)
-        serializer.save(responded_at=timezone.now(), status='ACCEPTED')
+        # 🚀 Status ACCEPTED dan RESPONDED (Javob berdi) holatiga o'tadi
+        serializer.save(responded_at=timezone.now(), status='RESPONDED')
 
-        # Arizaning barcha shifokorlar ko'rgan umumiy holatini yangilaymiz
-        application.status = 'COMPLETED'
-        application.save()
-
-        return Response({"message": "Tashxis va hujjat muvaffaqiyatli saqlandi!"})
+        return Response({"message": "Tashxis va hujjat muvaffaqiyatli saqlandi! Status 'RESPONDED' holatiga o'tdi."})
     
-    # 4. OPERATOR IZOHI (O'zgarishsiz qoladi)
+    # 4. OPERATOR IZOHI (O'ZGARTIRILDI 🚀)
     @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated, IsOperator])
     def operator_respond(self, request, pk=None):
         application = self.get_object()
 
-        if application.status not in ['COMPLETED']:
+        # Arizaga kamida bitta shifokor javob berganligini tekshiramiz
+        has_response = application.assignments.filter(status='RESPONDED').exists()
+        if not has_response:
             return Response(
-                {"error": "Ushbu arizaga hali shifokorlar javob bermagan yoki ariza allaqachon yopilgan!"}, 
+                {"error": "Ushbu arizaga hali biror bir shifokor javob yozmagan (RESPONDED bo'lmagan)!"}, 
                 status=status.HTTP_400_BAD_REQUEST
             )
 
@@ -161,17 +150,11 @@ class ApplicationViewSet(viewsets.ReadOnlyModelViewSet):
             "message": "Operator izohi saqlandi. 'send_to_user' orqali bemorga yuborishingiz mumkin."
         })
 
-    # 5. BEMORGA YUBORISH (O'zgarishsiz qoladi)
+    # 5. BEMORGA YUBORISH (KO'P FAYLLI REJIM UCHUN YANGILANDI 🚀)
     @extend_schema(request=None)
     @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated, IsOperator])
     def send_to_user(self, request, pk=None):
         application = self.get_object()
-
-        if application.status != 'COMPLETED':
-            return Response(
-                {"error": "Bu arizani yuborib bo'lmaydi."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
 
         if not application.operator_response:
             return Response(
@@ -179,15 +162,19 @@ class ApplicationViewSet(viewsets.ReadOnlyModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        application.status = 'CLOSED'
-        application.save()
+        # Faqat javob yozgan (RESPONDED) shifokorlarni olamiz
+        assignments = application.assignments.filter(status='RESPONDED').select_related('doctor')
+        if not assignments.exists():
+            return Response(
+                {"error": "Kamida bitta shifokor RESPONDED statusida bo'lishi kerak!"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
+        # 1. Shifokorlar tashxislarini matnga jamlaymiz
         shifokorlar_javobi = ""
-        # Faqat javob yozgan (ACCEPTED) shifokorlar javoblarini matnga jamlaymiz
-        assignments = application.assignments.filter(status='ACCEPTED', doctor_response_text__isnull=False)
-        
         for idx, assign in enumerate(assignments, 1):
-            shifokorlar_javobi += f"\n👨‍⚕️ {idx}-Shifokor ({assign.doctor.get_full_name()}):\n{assign.doctor_response_text}\n"
+            doc_name = assign.doctor.get_full_name() if assign.doctor.get_full_name() else assign.doctor.username
+            shifokorlar_javobi += f"\n👨‍⚕️ {idx}-Shifokor ({doc_name}):\n{assign.doctor_response_text}\n"
 
         try:
             bemor_telegram_id = application.sick.telegram_id
@@ -197,15 +184,34 @@ class ApplicationViewSet(viewsets.ReadOnlyModelViewSet):
                 f"📋 **Operator izohi:**\n{application.operator_response}\n\n"
                 "Sog'ligingizga e'tiborli bo'ling!"
             )
+            
+            # 2. Birinchi bo'lib umumiy matnli xabarni bemorga yuboramiz
             asyncio.run(send_to_user_bot(bemor_telegram_id, javob_matni))
-            return Response({"message": "Ariza muvaffaqiyatli yopildi va bemorga Telegram orqali yuborildi!"})
+
+            # 3. 🔥 SHIFOKORLARNING FAYLLARINI KETMA-KET YUBORISH MANTIQI
+            for assign in assignments:
+                doc_name = assign.doctor.get_full_name() if assign.doctor.get_full_name() else assign.doctor.username
+                
+                # Agar shifokor bot orqali fayl yuborgan bo'lsa (Telegram File ID bor bo'lsa)
+                if assign.doctor_response_file_id:
+                    caption_text = f"📄 Fayl: Dr. {doc_name} tashxisi uchun"
+                    asyncio.run(send_to_user_bot(bemor_telegram_id, text_message=caption_text, file_to_send=assign.doctor_response_file_id))
+                
+                # Agar shifokor sayt orqali fayl yuklagan bo'lsa (FileField fayli bor bo'lsa)
+                elif assign.doctor_response_file:
+                    caption_text = f"📄 Fayl: Dr. {doc_name} tashxisi uchun"
+                    # Django fayl obyekti yoki uning URL manzilini botga uzatamiz
+                    asyncio.run(send_to_user_bot(bemor_telegram_id, text_message=caption_text, file_to_send=assign.doctor_response_file))
+
+            return Response({"message": "Ariza muvaffaqiyatli yakunlandi, matn va barcha fayllar bemorga yuborildi!"})
+            
         except Exception as e:
             return Response({
-                "message": "Ariza tizimda yopildi, lekin Telegram bot orqali yuborishda xatolik yuz berdi.",
+                "message": "Operatsiya bajarildi, lekin Telegram bot orqali yuborishda xatolik yuz berdi.",
                 "details": str(e)
             }, status=status.HTTP_207_MULTI_STATUS)
 
-    # 6. XAVFSIZ FAYL PROXY (O'zgarishsiz qoladi)
+    # 6. XAVFSIZ FAYL PROXY (MUTLAQO DAXLSID 🔒 - QAT'IY TOPSHIRIQ)
     @action(detail=True, methods=['get'], url_path='view_file', permission_classes=[])
     def view_file(self, request, pk=None):
         try:

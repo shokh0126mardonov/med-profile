@@ -126,7 +126,7 @@ async def confirm_aplication(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 sick=sick_user,
                 text=context.user_data.get('application', ''),
                 user_file_url=context.user_data.get('user_file_url'),
-                status='NEW' # 🚀 To'g'ridan-to'g'ri ASSIGNED qilamiz, chunki hozir shifokorlar birikadi!
+                # status='NEW' # 🚀 To'g'ridan-to'g'ri ASSIGNED qilamiz, chunki hozir shifokorlar birikadi!
             )
             
             # =====================================================================
@@ -135,9 +135,8 @@ async def confirm_aplication(update: Update, context: ContextTypes.DEFAULT_TYPE)
             from django.contrib.auth import get_user_model
             from apps.application.models import ApplicationAssignment
             User = get_user_model()
+
             
-            # Roli DOCTOR bo'lgan barcha shifokorlarni asinxron filtrlaymiz
-            # Django ORMda async filter qilish uchun ro'yxatni forda aylantirish kifoya
             async for doctor in User.objects.filter(role='DOCTOR'):
                 # Har bir shifokor uchun asinxron biriktiruv yaratamiz
                 await ApplicationAssignment.objects.acreate(

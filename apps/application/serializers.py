@@ -63,7 +63,7 @@ class ApplicationListRetrieveSerializer(serializers.ModelSerializer):
         model = Applications
         fields = [
             'id', 'sick', 'text', 'user_file', 
-            'status', 'operator_response', 'assignments', 
+             'operator_response', 'assignments', 
             'created_at', 'updated_at'
         ]
 

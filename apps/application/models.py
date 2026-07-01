@@ -1,14 +1,6 @@
 from django.db import models
 
 class Applications(models.Model):
-    STATUS_CHOICES = [
-        ('NEW', 'Yangi (Operator kutilmoqda)'),
-        ('ASSIGNED', 'Shifokor(lar) biriktirildi'),
-        ('REJECTED', 'Rad etildi'),
-        ('COMPLETED', 'Yakunlandi (Shifokorlar javob berdi)'),
-        ('CLOSED', 'Yopildi (Bemorga javob yuborildi)'),
-    ]
-
     sick = models.ForeignKey(
         'users.SickModel', on_delete=models.CASCADE, related_name='applications'
     )
@@ -31,14 +23,12 @@ class Applications(models.Model):
     
     text = models.TextField(verbose_name="Bemor arizasi matni")
     operator_response = models.TextField(null=True, blank=True, verbose_name="Operator izohi")
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='NEW')
     
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return f"{self.pk} ----- {self.sick.phone}"
-
 
     class Meta:
         ordering = ['-pk']
@@ -47,10 +37,12 @@ class Applications(models.Model):
 
 
 class ApplicationAssignment(models.Model):
+    # 🚀 Har bir shifokor uchun mukammal munosabat zanjiri
     ASSIGNMENT_STATUS = [
         ('UNSEEN', "Hali ko'rmadi"),
-        ('ACCEPTED', "Qabul qildi / Javob berdi"),
+        ('ACCEPTED', "Qabul qildi (Jarayonda)"),
         ('REJECTED', "Rad etdi (Atkaz)"),
+        ('RESPONDED', "Javob berdi (Yakunlandi)"),
     ]
 
     application = models.ForeignKey(
@@ -102,4 +94,3 @@ class ApplicationAssignment(models.Model):
 
     def __str__(self):
         return f"Ariza {self.application.id} -> Dr. {self.doctor.username} ({self.get_status_display()})"
-
