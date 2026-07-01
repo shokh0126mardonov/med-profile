@@ -46,8 +46,13 @@ class Applications(models.Model):
         verbose_name = "Ariza"
         verbose_name_plural = "Arizalar"
 
-
 class ApplicationAssignment(models.Model):
+    ASSIGNMENT_STATUS = [
+        ('UNSEEN', "Hali ko'rmadi"),
+        ('ACCEPTED', "Qabul qildi / Javob berdi"),
+        ('REJECTED', "Rad etdi (Atkaz)"),
+    ]
+
     application = models.ForeignKey(
         Applications, 
         on_delete=models.CASCADE, 
@@ -60,6 +65,13 @@ class ApplicationAssignment(models.Model):
         related_name='assigned_cases'
     )
     
+    # 🔥 Yangi qo'shilgan status maydoni (Default holatda 'UNSEEN' ya'ni ko'rmadi turadi)
+    status = models.CharField(
+        max_length=20, 
+        choices=ASSIGNMENT_STATUS, 
+        default='UNSEEN',
+        verbose_name="Shifokor munosabati"
+    )
 
     doctor_response_text = models.TextField(
         null=True, 
@@ -90,4 +102,4 @@ class ApplicationAssignment(models.Model):
         verbose_name_plural = "Shifokor biriktiruvlari"
 
     def __str__(self):
-        return f"Ariza {self.application.id} -> Dr. {self.doctor.username}"
+        return f"Ariza {self.application.id} -> Dr. {self.doctor.username} ({self.get_status_display()})"

@@ -6,7 +6,7 @@ from django.db.models import Count, Q, CharField
 from django.db.models.functions import Cast
 from django.contrib.auth import get_user_model
 from django.http import Http404
-from drf_spectacular.utils import extend_schema, OpenApiParameter  # Swagger uchun
+from drf_spectacular.utils import extend_schema, OpenApiParameter
 
 from apps.users.models import SickModel
 
@@ -16,19 +16,78 @@ class ApplicationStatisticsAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     @extend_schema(
-        summary="Umumiy yoki aniq bir ariza bo'yicha statistika",
-        description="Agar application_id yuborilsa, faqat o'sha arizani shifokorlar qanday ko'rganini chiqaradi.",
+        summary="Umumiy, ariza yoki shifokor bo'yicha statistika",
+        description="Filtrlar orqali umumiy, bitta ariza ichidagi shifokorlar holati yoki bitta shifokorga tegishli arizalar ro'yxatini olish.",
         parameters=[
-            OpenApiParameter(name='application_id', type=int, description="Konkret ariza IDsi (ixtiyoriy)", required=False)
+            OpenApiParameter(name='application_id', type=int, description="Konkret ariza IDsi (ixtiyoriy)", required=False),
+            OpenApiParameter(name='doctor_id', type=int, description="Konkret shifokor IDsi (ixtiyoriy)", required=False)
         ],
         responses={200: dict}
     )
     def get(self, request, *args, **kwargs):
-        # 💡 URL'dan ?application_id=... parametrini tekshiramiz
         application_id = request.query_params.get('application_id')
+        doctor_id = request.query_params.get('doctor_id')
 
         # =====================================================================
-        # 🎯 VARIANT A: OPERATOR ANIQ BITTA ARIZANI SO'RAGANDA (?application_id=2)
+        # 🎯 VARIANT C: ANIQ SHIFOKOR BO'YICHA ARIZALAR RO'YXATI
+        # =====================================================================
+        if doctor_id:
+            try:
+                doctor = User.objects.get(pk=doctor_id, role='DOCTOR')
+            except User.DoesNotExist:
+                raise Http404("Bunday shifokor topilmadi yoki foydalanuvchi shifokor emas!")
+
+            doctor_assignments = ApplicationAssignment.objects.filter(doctor=doctor).select_related('application', 'application__sick')
+
+            unseen_applications = []
+            accepted_applications = []
+            rejected_applications = []
+
+            for asn in doctor_assignments:
+                app = asn.application
+                app_data = {
+                    "application_id": app.id,
+                    "patient_phone": str(app.sick.phone) if hasattr(app.sick, 'phone') else None,
+                    "global_status": app.status,
+                    "text": app.text[:100] + "..." if app.text else "",
+                    "responded_at": asn.responded_at
+                }
+
+                if asn.status == 'ACCEPTED':
+                    app_data["response_text"] = asn.doctor_response_text
+                    accepted_applications.append(app_data)
+                elif asn.status == 'REJECTED':
+                    rejected_applications.append(app_data)
+                elif asn.status == 'UNSEEN':
+                    # 💡 SIZ AYTGAN SHART: Qolgan barcha ko'rmaganlari ichidan faqat 'NEW' bo'lganlarini UNSEEN qilamiz
+                    if app.status == 'NEW':
+                        unseen_applications.append(app_data)
+
+            return Response({
+                "mode": "single_doctor_stats",
+                "doctor": {
+                    "id": doctor.id,
+                    "username": doctor.username,
+                    "phone": str(doctor.phone) if hasattr(doctor, 'phone') else None,
+                },
+                "statistics": {
+                    "total_assigned_cases": doctor_assignments.count(),
+                    "unseen_count": len(unseen_applications),
+                    "accepted_count": len(accepted_applications),
+                    "rejected_count": len(rejected_applications)
+                },
+                "applications": {
+                    "unseen": unseen_applications,       
+                    "accepted": accepted_applications,   
+                    "rejected": rejected_applications    
+                }
+            })
+
+        # =====================================================================
+        # 🎯 VARIANT A: ANIQ ARIZA BO'YICHA STATISTIKA (BARCHA SHIFOKORLAR UCHUN)
+        # =====================================================================
+        # =====================================================================
+        # 🎯 VARIANT A: ANIQ ARIZA BO'YICHA STATISTIKA (SIGNALDAN KEYINGI HOLAT)
         # =====================================================================
         if application_id:
             try:
@@ -36,43 +95,49 @@ class ApplicationStatisticsAPIView(APIView):
             except Applications.DoesNotExist:
                 raise Http404("Bunday ariza topilmadi!")
 
-            assignments = ApplicationAssignment.objects.filter(application=application)
+            # 🚀 Endi bazada hamma shifokor uchun yozuv borligi aniq!
+            assignments = ApplicationAssignment.objects.filter(application=application).select_related('doctor')
 
-            total_accepted = assignments.filter(doctor_response_text__isnull=False).exclude(doctor_response_text='').count()
-            total_unseen = assignments.filter(Q(doctor_response_text__isnull=True) | Q(doctor_response_text='')).count()
-            total_rejected = 1 if application.status == 'REJECTED' else 0
+            total_unseen = 0
+            total_accepted = 0
+            total_rejected = 0
+            
+            doctors_details = []
 
-            # Ko'rmagan shifokorlar kimligi
-            unseen_doctor_ids = assignments.filter(
-                Q(doctor_response_text__isnull=True) | Q(doctor_response_text='')
-            ).values_list('doctor_id', flat=True)
+            for asn in assignments:
+                doc = asn.doctor
+                phone_num = str(doc.phone) if hasattr(doc, 'phone') else None
+                
+                if asn.status == 'UNSEEN':
+                    total_unseen += 1
+                elif asn.status == 'ACCEPTED':
+                    total_accepted += 1
+                elif asn.status == 'REJECTED':
+                    total_rejected += 1
 
-            unseen_doctors = User.objects.filter(id__in=unseen_doctor_ids).annotate(
-                phone_str=Cast('phone', output_field=CharField())
-            ).values('id', 'username', 'first_name', 'last_name', 'phone_str')
-
-            formatted_unseen_doctors = []
-            for doc in unseen_doctors:
-                doc['phone'] = doc.pop('phone_str')
-                formatted_doctors_stats = [] # xavfsizlik uchun bo'sh ro'yxat
-                formatted_unseen_doctors.append(doc)
+                doctors_details.append({
+                    "id": doc.id,
+                    "username": doc.username,
+                    "phone": phone_num,
+                    "status": asn.status, # UNSEEN, ACCEPTED, REJECTED
+                    "response": asn.doctor_response_text if asn.doctor_response_text else None
+                })
 
             return Response({
                 "mode": "single_application_stats",
                 "application_id": application.id,
-                "text": application.text,
                 "status": application.status,
                 "statistics": {
-                    "total_doctors_assigned": assignments.count(),
-                    "accepted_count": total_accepted,
-                    "unseen_count": total_unseen,
-                    "rejected_count": total_rejected
+                    "total_assigned": assignments.count(), # Jami shifokorlar soni chiqadi
+                    "unseen": total_unseen,
+                    "accepted": total_accepted,
+                    "rejected": total_rejected
                 },
-                "unseen_doctors_details": formatted_unseen_doctors
+                "doctors": doctors_details 
             })
 
         # =====================================================================
-        # 📊 VARIANT B: HECH NARSA YUBORILMASA – UMUMIY GLOBAL STATISTIKA
+        # 📊 VARIANT B: UMUMIY GLOBAL STATISTIKA
         # =====================================================================
         sick_stats = SickModel.objects.aggregate(
             total_sicks=Count('id'),
@@ -92,7 +157,7 @@ class ApplicationStatisticsAPIView(APIView):
         )
 
         unseen_doctor_ids = ApplicationAssignment.objects.filter(
-            Q(doctor_response_text__isnull=True) | Q(doctor_response_text='')
+            status='UNSEEN'
         ).values_list('doctor_id', flat=True).distinct()
 
         pending_doctors_list = User.objects.filter(
@@ -100,18 +165,17 @@ class ApplicationStatisticsAPIView(APIView):
             role='DOCTOR'
         ).annotate(
             phone_str=Cast('phone', output_field=CharField())
-        ).values('id', 'username', 'first_name', 'last_name', 'phone_str')
+        ).values('id', 'username', 'phone_str')
 
         doctors_stats = User.objects.filter(role='DOCTOR').annotate(
             phone_str=Cast('phone', output_field=CharField()),
-            total_assigned=Count('doctor_applications'),
-            pending_response=Count('doctor_applications', filter=Q(doctor_applications__status='ASSIGNED')),
-            completed_response=Count('doctor_applications', filter=Q(doctor_applications__status='COMPLETED')),
-            closed_response=Count('doctor_applications', filter=Q(doctor_applications__status='CLOSED')),
-            total_answered=Count('doctor_applications', filter=Q(doctor_applications__status__in=['COMPLETED', 'CLOSED']))
+            total_assigned=Count('assigned_cases', distinct=True), 
+            unseen_count=Count('assigned_cases', filter=Q(assigned_cases__status='UNSEEN'), distinct=True),
+            accepted_count=Count('assigned_cases', filter=Q(assigned_cases__status='ACCEPTED'), distinct=True),
+            rejected_count=Count('assigned_cases', filter=Q(assigned_cases__status='REJECTED'), distinct=True)
         ).values(
-            'id', 'username', 'first_name', 'last_name', 'phone_str',
-            'total_assigned', 'pending_response', 'completed_response', 'closed_response', 'total_answered'
+            'id', 'username', 'phone_str',
+            'total_assigned', 'unseen_count', 'accepted_count', 'rejected_count'
         )
 
         formatted_doctors_stats = []
