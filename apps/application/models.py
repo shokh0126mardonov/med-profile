@@ -60,22 +60,20 @@ class ApplicationAssignment(models.Model):
         related_name='assigned_cases'
     )
     
-    # Shifokorning matnli tashxisi
+
     doctor_response_text = models.TextField(
         null=True, 
         blank=True, 
         verbose_name="Shifokor tashxisi/javobi"
     )
     
-    # 💡 1. VEB-SAYTDAN YUKLANADIGAN REAL FAYL (Shifokor saytdan yuklaganda shu yerga tushadi)
     doctor_response_file = models.FileField(
-        upload_to='doctor_responses/', 
+        upload_to='doctor_responses//%Y/%m/%d/', 
         null=True, 
         blank=True, 
-        verbose_name="Shifokor yuklagan hujjat/fayl (Sayt uchun)"
+        verbose_name="Shifokor yuklagan hujjat/fayl (Sayt uchun)",
     )
     
-    # 💡 2. TELEGRAM FILE ID (Bot bemorga faylni qaytarib yuborishi uchun kerak bo'ladi)
     doctor_response_file_id = models.CharField(
         max_length=255, 
         null=True, 
