@@ -110,7 +110,7 @@ async def get_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return StepAplication.CONFIRM
 
 
-# 3. TASDIQLASH (HA BO'LGANDA)
+
 async def confirm_aplication(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -118,40 +118,54 @@ async def confirm_aplication(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     if query.data == 'confirm_yes':
         try:
-            # Sening mantiqing bo'yicha foydalanuvchi bazada aniq bor, shuning uchun aget() qilamiz
+            # 1. Bemor foydalanuvchini bazadan asinxron olamiz
             sick_user = await SickModel.objects.aget(telegram_id=user_id)
             
-            await Applications.objects.acreate(
+            # 2. Arizani asinxron yaratamiz
+            new_application = await Applications.objects.acreate(
                 sick=sick_user,
                 text=context.user_data.get('application', ''),
                 user_file_url=context.user_data.get('user_file_url'),
-                status='NEW' # Default holatda yangi ariza
+                status='NEW' # 🚀 To'g'ridan-to'g'ri ASSIGNED qilamiz, chunki hozir shifokorlar birikadi!
             )
+            
+            # =====================================================================
+            # 🔥 ASINXRON BIRIKTIRUV (BOT ICHIDAGI DOIMIY ISHLOVCHI FOR SIKLI)
+            # =====================================================================
+            from django.contrib.auth import get_user_model
+            from apps.application.models import ApplicationAssignment
+            User = get_user_model()
+            
+            # Roli DOCTOR bo'lgan barcha shifokorlarni asinxron filtrlaymiz
+            # Django ORMda async filter qilish uchun ro'yxatni forda aylantirish kifoya
+            async for doctor in User.objects.filter(role='DOCTOR'):
+                # Har bir shifokor uchun asinxron biriktiruv yaratamiz
+                await ApplicationAssignment.objects.acreate(
+                    application=new_application,
+                    doctor=doctor,
+                    status='UNSEEN'
+                )
+            # =====================================================================
             
             await query.edit_message_text('✅ Arizangiz muvaffaqiyatli shifokorlarga yuborildi!')
             context.user_data.clear() 
             return ConversationHandler.END
             
         except Exception as e:
-            # Agar kodingda boshqa xato bo'lsa terminal srazi senga aytib beradi:
             print(f"💥 BAZAGA YOZISHDA XATO: {e}")
             await query.edit_message_text("❌ Tizimda xatolik yuz berdi. Iltimos, qaytadan urinib ko'ring.")
             return ConversationHandler.END
 
-    # 💡 SEN AYTGAN JOYLAR: "YO'Q" (CONFIRM_NO) BO'LGANDA QAYTADAN ARIZA SO'RASH
     elif query.data == 'confirm_no':
-        context.user_data.pop('application', None) # Eski matnni o'chirib tashlaymiz
+        context.user_data.pop('application', None)
         context.user_data.pop('file_id', None)
         
         await query.edit_message_text(
             text="❌ **Ariza bekor qilindi.**\n\nIltimos, shifokorlarimiz uchun yangi ariza matnini qaytadan yozib yuboring:",
             parse_mode=ParseMode.MARKDOWN
         )
-        
-        # Foydalanuvchini yana ariza matnini kutish bosqichiga qaytaramiz!
         return StepAplication.APPLICATION
-
-
+    
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.message.reply_text(
         "Bu jarayon to'xtadi! ", reply_markup=ReplyKeyboardRemove()

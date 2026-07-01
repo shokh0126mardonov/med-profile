@@ -12,9 +12,7 @@ class Applications(models.Model):
     sick = models.ForeignKey(
         'users.SickModel', on_delete=models.CASCADE, related_name='applications'
     )
-    
     user_file_url = models.URLField(max_length=500, null=True, blank=True, verbose_name="Bemor fayli havolasi")
-
     
     doctors = models.ManyToManyField(
         'users.User',
@@ -39,12 +37,14 @@ class Applications(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return f"{self.pk}  ----- {self.sick.phone}"
+        return f"{self.pk} ----- {self.sick.phone}"
+
 
     class Meta:
         ordering = ['-pk']
         verbose_name = "Ariza"
         verbose_name_plural = "Arizalar"
+
 
 class ApplicationAssignment(models.Model):
     ASSIGNMENT_STATUS = [
@@ -65,7 +65,6 @@ class ApplicationAssignment(models.Model):
         related_name='assigned_cases'
     )
     
-    # 🔥 Yangi qo'shilgan status maydoni (Default holatda 'UNSEEN' ya'ni ko'rmadi turadi)
     status = models.CharField(
         max_length=20, 
         choices=ASSIGNMENT_STATUS, 
@@ -80,7 +79,7 @@ class ApplicationAssignment(models.Model):
     )
     
     doctor_response_file = models.FileField(
-        upload_to='doctor_responses//%Y/%m/%d/', 
+        upload_to='doctor_responses/%Y/%m/%d/', 
         null=True, 
         blank=True, 
         verbose_name="Shifokor yuklagan hujjat/fayl (Sayt uchun)",
@@ -103,3 +102,4 @@ class ApplicationAssignment(models.Model):
 
     def __str__(self):
         return f"Ariza {self.application.id} -> Dr. {self.doctor.username} ({self.get_status_display()})"
+

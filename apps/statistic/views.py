@@ -29,7 +29,7 @@ class ApplicationStatisticsAPIView(APIView):
         doctor_id = request.query_params.get('doctor_id')
 
         # =====================================================================
-        # 🎯 VARIANT C: ANIQ SHIFOKOR BO'YICHA ARIZALAR RO'YXATI
+        # 🎯 VARIANT C: ANIQ SHIFOKOR BO'YICHA ARIZALAR RO'YXATI VA STATISTIKASI
         # =====================================================================
         if doctor_id:
             try:
@@ -37,6 +37,7 @@ class ApplicationStatisticsAPIView(APIView):
             except User.DoesNotExist:
                 raise Http404("Bunday shifokor topilmadi yoki foydalanuvchi shifokor emas!")
 
+            # Shifokorning barcha biriktiruvlarini (assignments) olamiz
             doctor_assignments = ApplicationAssignment.objects.filter(doctor=doctor).select_related('application', 'application__sick')
 
             unseen_applications = []
@@ -45,9 +46,12 @@ class ApplicationStatisticsAPIView(APIView):
 
             for asn in doctor_assignments:
                 app = asn.application
+                if not app:
+                    continue
+                    
                 app_data = {
                     "application_id": app.id,
-                    "patient_phone": str(app.sick.phone) if hasattr(app.sick, 'phone') else None,
+                    "patient_phone": str(app.sick.phone) if hasattr(app, 'sick') and app.sick and hasattr(app.sick, 'phone') else None,
                     "global_status": app.status,
                     "text": app.text[:100] + "..." if app.text else "",
                     "responded_at": asn.responded_at
@@ -59,8 +63,9 @@ class ApplicationStatisticsAPIView(APIView):
                 elif asn.status == 'REJECTED':
                     rejected_applications.append(app_data)
                 elif asn.status == 'UNSEEN':
-                    # 💡 SIZ AYTGAN SHART: Qolgan barcha ko'rmaganlari ichidan faqat 'NEW' bo'lganlarini UNSEEN qilamiz
-                    if app.status == 'NEW':
+                    # 🚀 DIQQAT: Signal ishlagach ariza statusi 'ASSIGNED' bo'ladi.
+                    # Shifokor ko'rmagan arizalarini topish uchun global status 'ASSIGNED' bo'lishi kerak.
+                    if app.status == 'ASSIGNED':
                         unseen_applications.append(app_data)
 
             return Response({
@@ -84,10 +89,7 @@ class ApplicationStatisticsAPIView(APIView):
             })
 
         # =====================================================================
-        # 🎯 VARIANT A: ANIQ ARIZA BO'YICHA STATISTIKA (BARCHA SHIFOKORLAR UCHUN)
-        # =====================================================================
-        # =====================================================================
-        # 🎯 VARIANT A: ANIQ ARIZA BO'YICHA STATISTIKA (SIGNALDAN KEYINGI HOLAT)
+        # 🎯 VARIANT A: ANIQ ARIZA BO'YICHA STATISTIKA (SHIFOKORLAR HOLATI)
         # =====================================================================
         if application_id:
             try:
@@ -95,17 +97,17 @@ class ApplicationStatisticsAPIView(APIView):
             except Applications.DoesNotExist:
                 raise Http404("Bunday ariza topilmadi!")
 
-            # 🚀 Endi bazada hamma shifokor uchun yozuv borligi aniq!
             assignments = ApplicationAssignment.objects.filter(application=application).select_related('doctor')
 
             total_unseen = 0
             total_accepted = 0
             total_rejected = 0
-            
             doctors_details = []
 
             for asn in assignments:
                 doc = asn.doctor
+                if not doc:
+                    continue
                 phone_num = str(doc.phone) if hasattr(doc, 'phone') else None
                 
                 if asn.status == 'UNSEEN':
@@ -119,7 +121,7 @@ class ApplicationStatisticsAPIView(APIView):
                     "id": doc.id,
                     "username": doc.username,
                     "phone": phone_num,
-                    "status": asn.status, # UNSEEN, ACCEPTED, REJECTED
+                    "status": asn.status,  # UNSEEN, ACCEPTED, REJECTED
                     "response": asn.doctor_response_text if asn.doctor_response_text else None
                 })
 
@@ -128,7 +130,7 @@ class ApplicationStatisticsAPIView(APIView):
                 "application_id": application.id,
                 "status": application.status,
                 "statistics": {
-                    "total_assigned": assignments.count(), # Jami shifokorlar soni chiqadi
+                    "total_assigned": assignments.count(),
                     "unseen": total_unseen,
                     "accepted": total_accepted,
                     "rejected": total_rejected
@@ -137,8 +139,10 @@ class ApplicationStatisticsAPIView(APIView):
             })
 
         # =====================================================================
-        # 📊 VARIANT B: UMUMIY GLOBAL STATISTIKA
+        # 📊 VARIANT B: UMUMIY GLOBAL STATISTIKA (BOSH SAHIFA UCHUN)
         # =====================================================================
+        
+        # Bemorlar statistikasi
         sick_stats = SickModel.objects.aggregate(
             total_sicks=Count('id'),
             arrived_sicks=Count('id', filter=Q(to_come=True)),
@@ -147,6 +151,7 @@ class ApplicationStatisticsAPIView(APIView):
 
         total_doctors_count = User.objects.filter(role='DOCTOR').count()
 
+        # Global arizalar statistikasi
         global_stats = Applications.objects.aggregate(
             total_applications=Count('id'),
             new_count=Count('id', filter=Q(status='NEW')),
@@ -156,6 +161,7 @@ class ApplicationStatisticsAPIView(APIView):
             closed_count=Count('id', filter=Q(status='CLOSED'))
         )
 
+        # Kamida bitta arizani hali ko'rmagan (UNSEEN) shifokorlar ro'yxati
         unseen_doctor_ids = ApplicationAssignment.objects.filter(
             status='UNSEEN'
         ).values_list('doctor_id', flat=True).distinct()
@@ -167,6 +173,7 @@ class ApplicationStatisticsAPIView(APIView):
             phone_str=Cast('phone', output_field=CharField())
         ).values('id', 'username', 'phone_str')
 
+        # Barcha shifokorlarning shaxsiy ko'rsatkichlari (assigned_cases relyatsiyasi orqali)
         doctors_stats = User.objects.filter(role='DOCTOR').annotate(
             phone_str=Cast('phone', output_field=CharField()),
             total_assigned=Count('assigned_cases', distinct=True), 
@@ -178,6 +185,7 @@ class ApplicationStatisticsAPIView(APIView):
             'total_assigned', 'unseen_count', 'accepted_count', 'rejected_count'
         )
 
+        # Ma'lumotlarni frontend uchun chiroyli formatlash (phone formatlash)
         formatted_doctors_stats = []
         for doc in doctors_stats:
             doc['phone'] = doc.pop('phone_str')
@@ -191,16 +199,16 @@ class ApplicationStatisticsAPIView(APIView):
         return Response({
             "mode": "global_stats",
             "global_stats": {
-                "total_applications": global_stats['total_applications'],
-                "new_count": global_stats['new_count'],
-                "assigned_count": global_stats['assigned_count'],
-                "rejected_count": global_stats['rejected_count'],
-                "completed_count": global_stats['completed_count'],
-                "closed_count": global_stats['closed_count'],
+                "total_applications": global_stats['total_applications'] or 0,
+                "new_count": global_stats['new_count'] or 0,
+                "assigned_count": global_stats['assigned_count'] or 0,
+                "rejected_count": global_stats['rejected_count'] or 0,
+                "completed_count": global_stats['completed_count'] or 0,
+                "closed_count": global_stats['closed_count'] or 0,
                 "total_doctors": total_doctors_count,                 
-                "total_registered_patients": sick_stats['total_sicks'], 
-                "arrived_patients_count": sick_stats['arrived_sicks'],  
-                "not_arrived_patients_count": sick_stats['not_arrived_sicks']
+                "total_registered_patients": sick_stats['total_sicks'] or 0, 
+                "arrived_patients_count": sick_stats['arrived_sicks'] or 0,  
+                "not_arrived_patients_count": sick_stats['not_arrived_sicks'] or 0
             },
             "unseen_doctors_details": formatted_pending_doctors,
             "doctors_stats": formatted_doctors_stats
