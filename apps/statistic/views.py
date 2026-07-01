@@ -31,42 +31,35 @@ class ApplicationStatisticsAPIView(APIView):
         # =====================================================================
         # 🎯 VARIANT C: ANIQ SHIFOKOR BO'YICHA ARIZALAR RO'YXATI VA STATISTIKASI
         # =====================================================================
+# =====================================================================
+        # 🎯 VARIANT C: ANIQ SHIFOKOR BO'YICHA ARIZALAR ID RO'YXATI (100% TO'G'RILANDI)
+        # =====================================================================
         if doctor_id:
             try:
                 doctor = User.objects.get(pk=doctor_id, role='DOCTOR')
             except User.DoesNotExist:
                 raise Http404("Bunday shifokor topilmadi yoki foydalanuvchi shifokor emas!")
 
-            # Shifokorning barcha biriktiruvlarini (assignments) olamiz
-            doctor_assignments = ApplicationAssignment.objects.filter(doctor=doctor).select_related('application', 'application__sick')
+            # Shifokorning barcha biriktiruvlarini olamiz
+            doctor_assignments = ApplicationAssignment.objects.filter(doctor=doctor).select_related('application')
 
-            unseen_applications = []
-            accepted_applications = []
-            rejected_applications = []
+            unseen_application_ids = []
+            accepted_application_ids = []
+            rejected_application_ids = []
 
             for asn in doctor_assignments:
                 app = asn.application
                 if not app:
                     continue
-                    
-                app_data = {
-                    "application_id": app.id,
-                    "patient_phone": str(app.sick.phone) if hasattr(app, 'sick') and app.sick and hasattr(app.sick, 'phone') else None,
-                    "global_status": app.status,
-                    "text": app.text[:100] + "..." if app.text else "",
-                    "responded_at": asn.responded_at
-                }
 
+                # Global status qanday bo'lishidan qat'iy nazar, faqat shifokor munosabatiga qaraymiz!
                 if asn.status == 'ACCEPTED':
-                    app_data["response_text"] = asn.doctor_response_text
-                    accepted_applications.append(app_data)
+                    accepted_application_ids.append(app.id)
                 elif asn.status == 'REJECTED':
-                    rejected_applications.append(app_data)
+                    rejected_application_ids.append(app.id)
                 elif asn.status == 'UNSEEN':
-                    # 🚀 DIQQAT: Signal ishlagach ariza statusi 'ASSIGNED' bo'ladi.
-                    # Shifokor ko'rmagan arizalarini topish uchun global status 'ASSIGNED' bo'lishi kerak.
-                    if app.status == 'ASSIGNED':
-                        unseen_applications.append(app_data)
+                    # 🚀 MANA ENERGIYANI KO'TARADIGAN JOX: Ortiqcha global status shartini olib tashladik!
+                    unseen_application_ids.append(app.id)
 
             return Response({
                 "mode": "single_doctor_stats",
@@ -77,14 +70,14 @@ class ApplicationStatisticsAPIView(APIView):
                 },
                 "statistics": {
                     "total_assigned_cases": doctor_assignments.count(),
-                    "unseen_count": len(unseen_applications),
-                    "accepted_count": len(accepted_applications),
-                    "rejected_count": len(rejected_applications)
+                    "unseen_count": len(unseen_application_ids),
+                    "accepted_count": len(accepted_application_ids),
+                    "rejected_count": len(rejected_application_ids)
                 },
                 "applications": {
-                    "unseen": unseen_applications,       
-                    "accepted": accepted_applications,   
-                    "rejected": rejected_applications    
+                    "unseen": unseen_application_ids,       # Endi [30] deb aniq chiqadi!
+                    "accepted": accepted_application_ids,   
+                    "rejected": rejected_application_ids    
                 }
             })
 
@@ -118,10 +111,11 @@ class ApplicationStatisticsAPIView(APIView):
                     total_rejected += 1
 
                 doctors_details.append({
+                    "assignment_id": asn.id,
                     "id": doc.id,
                     "username": doc.username,
                     "phone": phone_num,
-                    "status": asn.status,  # UNSEEN, ACCEPTED, REJECTED
+                    "status": asn.status,  
                     "response": asn.doctor_response_text if asn.doctor_response_text else None
                 })
 
@@ -141,8 +135,6 @@ class ApplicationStatisticsAPIView(APIView):
         # =====================================================================
         # 📊 VARIANT B: UMUMIY GLOBAL STATISTIKA (BOSH SAHIFA UCHUN)
         # =====================================================================
-        
-        # Bemorlar statistikasi
         sick_stats = SickModel.objects.aggregate(
             total_sicks=Count('id'),
             arrived_sicks=Count('id', filter=Q(to_come=True)),
@@ -151,7 +143,6 @@ class ApplicationStatisticsAPIView(APIView):
 
         total_doctors_count = User.objects.filter(role='DOCTOR').count()
 
-        # Global arizalar statistikasi
         global_stats = Applications.objects.aggregate(
             total_applications=Count('id'),
             new_count=Count('id', filter=Q(status='NEW')),
@@ -161,7 +152,6 @@ class ApplicationStatisticsAPIView(APIView):
             closed_count=Count('id', filter=Q(status='CLOSED'))
         )
 
-        # Kamida bitta arizani hali ko'rmagan (UNSEEN) shifokorlar ro'yxati
         unseen_doctor_ids = ApplicationAssignment.objects.filter(
             status='UNSEEN'
         ).values_list('doctor_id', flat=True).distinct()
@@ -173,7 +163,6 @@ class ApplicationStatisticsAPIView(APIView):
             phone_str=Cast('phone', output_field=CharField())
         ).values('id', 'username', 'phone_str')
 
-        # Barcha shifokorlarning shaxsiy ko'rsatkichlari (assigned_cases relyatsiyasi orqali)
         doctors_stats = User.objects.filter(role='DOCTOR').annotate(
             phone_str=Cast('phone', output_field=CharField()),
             total_assigned=Count('assigned_cases', distinct=True), 
@@ -185,7 +174,6 @@ class ApplicationStatisticsAPIView(APIView):
             'total_assigned', 'unseen_count', 'accepted_count', 'rejected_count'
         )
 
-        # Ma'lumotlarni frontend uchun chiroyli formatlash (phone formatlash)
         formatted_doctors_stats = []
         for doc in doctors_stats:
             doc['phone'] = doc.pop('phone_str')

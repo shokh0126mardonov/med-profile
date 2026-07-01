@@ -11,6 +11,9 @@ class User(AbstractUser):
     role = models.CharField(choices=UserRole.choices)
     phone = PhoneNumberField(unique=True, region="UZ", blank=True, null=True)
 
+    def __str__(self):
+        return f"{self.pk} {self.username}"
+
     class Meta:
         ordering = ['-pk']
 
